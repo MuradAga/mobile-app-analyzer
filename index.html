@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CogTool</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      --accent-color: #076EFF;
+      background: linear-gradient(135deg, #e0f7fa 0%, #fff 100%);
+      color: #202124;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    main {
+      background-color: #ffffffdd;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      box-sizing: border-box;
+      width: 100%;
+      padding: 24px;
+      max-width: 500px;
+      margin: 24px;
+      border-radius: 20px;
+      transition: all 0.3s ease-in-out;
+    }
+
+    h1 {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 26px;
+      margin-bottom: 16px;
+    }
+
+    .image-picker {
+      display: flex;
+      width: 100%;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .image-choice {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px dashed #90caf9;
+      padding: 16px;
+      text-align: center;
+      width: 100%;
+      background: #f0f8ff;
+      transition: background 0.3s;
+    }
+
+    .image-choice:hover {
+      background: #e3f2fd;
+    }
+
+    .image-choice input[type="file"] {
+      width: 100%;
+    }
+
+    .preview {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .output {
+      margin-top: 20px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-size: 15px;
+      color: #333;
+      background-color: #fefefe;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 0 0 1px #ddd;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>CogTool</h1>
+    <form>
+      <div class="image-picker">
+        <label class="image-choice">
+          <input type="file" name="chosen-file" accept="image/*" required />
+        </label>
+      </div>
+    </form>
+    <img class="preview" style="display:none" />
+    <p class="output">(Results will appear here)</p>
+  </main>
+
+  <script type="module">
+    import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from 'https://esm.run/@google/generative-ai'
+    import Base64 from 'https://esm.run/base64-js'
+    import MarkdownIt from 'https://esm.run/markdown-it'
+
+    let API_KEY = 'AIzaSyCYdN78VcZxqwkAK8JD0d1yrmGyTrnBtUY'
+
+    let output = document.querySelector('.output')
+    let fileInput = document.querySelector('input[name="chosen-file"]')
+    let preview = document.querySelector('.preview')
+
+    fileInput.onchange = async () => {
+      output.textContent = 'Analyzing image...'
+
+      try {
+        let file = fileInput.files[0]
+        if (!file) throw new Error('No file selected')
+
+        preview.style.display = 'block'
+        preview.src = URL.createObjectURL(file)
+
+        let reader = new FileReader()
+        reader.readAsArrayBuffer(file)
+
+        reader.onload = async () => {
+          let buffer1 = new Uint8Array(reader.result)
+          let imageBase64 = Base64.fromByteArray(buffer1)
+
+          let contents = [
+            {
+              role: 'user',
+              parts: [
+                { inline_data: { mime_type: file.type, data: imageBase64 } },
+                { text: 'Briefly analyze this mobile UI screenshot and suggest concrete design improvements (font, color, layout, size).' },
+              ],
+            },
+          ]
+
+          const genAI = new GoogleGenerativeAI(API_KEY)
+          const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            safetySettings: [
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+              },
+            ],
+          })
+
+          const result = await model.generateContentStream({ contents })
+
+          let buffer2 = []
+          let md = new MarkdownIt()
+          for await (let response of result.stream) {
+            buffer2.push(response.text())
+            output.innerHTML = md.render(buffer2.join(''))
+          }
+        }
+      } catch (e) {
+        output.innerHTML += '<hr>' + e
+      }
+    }
+  </script>
+</body>
+
+</html>
